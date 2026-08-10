@@ -1,0 +1,416 @@
+plugins {
+    id 'fabric-loom' version "${loom_version}"
+    id 'maven-publish'
+}
+
+version = project.mod_version
+group = project.maven_group
+
+base { archivesName = project.archives_base_name }
+
+loom {
+    splitEnvironmentSourceSets()
+
+    mixin {
+        useLegacyMixinAp = true
+        add sourceSets.client, "shabao_ai.client.refmap.json"
+    }
+
+    mods {
+        "shabao_ai" {
+            sourceSet sourceSets.main
+            sourceSet sourceSets.client
+        }
+    }
+}
+
+repositories {
+    def localMinecraftLibraries = new File(System.getenv('APPDATA') ?: '', '.minecraft/libraries')
+    if (localMinecraftLibraries.isDirectory()) {
+        flatDir {
+            dirs fileTree(localMinecraftLibraries).matching { include '**/*.jar' }.files.collect { it.parentFile }.unique()
+        }
+    }
+    // ModMenu 来自 TerraformersMC 仓库
+    maven { url = 'https://maven.terraformersmc.com/releases/' }
+    // Cloth Config 来自 Architectury 仓库
+    maven { url = 'https://maven.architectury.dev/' }
+    maven { url = 'https://bmclapi2.bangbang93.com/maven/' }
+    maven { url = 'https://maven.aliyun.com/repository/public/' }
+    mavenCentral()
+}
+
+def minecraftLibraries = new File(System.getenv('APPDATA') ?: '', '.minecraft/libraries')
+def mixinProcessorJar = new File(minecraftLibraries,
+        'net/fabricmc/sponge-mixin/0.17.3+mixin.0.8.7/sponge-mixin-0.17.3+mixin.0.8.7.jar')
+configurations.configureEach {
+    exclude group: 'com.ibm.icu', module: 'icu4j'
+    exclude group: 'it.unimi.dsi', module: 'fastutil'
+    if (name == 'minecraftRuntimeLibraries') {
+        // Native LWJGL artifacts are not needed to remap this mod and are supplied by the launcher at runtime.
+        exclude group: 'org.lwjgl'
+    }
+}
+
+// ProGuard 混淆工具依赖（仅内测版构建使用）
+configurations {
+    proguard
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${project.minecraft_version}"
+    mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
+    // Local copies come from the installed Minecraft 1.21.1 Fabric profile.
+    // This keeps builds reproducible on networks where maven.fabricmc.net TLS is blocked.
+    compileOnly files("libs/fabric-loader-${project.loader_version}.jar")
+    modImplementation files("libs/fabric-api-${project.fabric_version}.jar")
+    modImplementation fileTree(dir: 'libs/fabric-api-components', include: '*.jar')
+    // 模组配置 UI：ModMenu 提供"模组列表 -> 配置"入口，Cloth Config 负责渲染表单
+    // 用 modCompileOnly 而非 modImplementation，避免把它们的 jar 嵌进本 mod 的 fat-jar
+    // （嵌入后会出现 nested jar 在 main 阶段被错误加载、抢占 classpath 的问题，
+    //  实测会让 Registry 等 Minecraft 基础类 NoClassDefFoundError）。
+    // 玩家需要自己把 modmenu 和 cloth-config 的 jar 放进 .minecraft/mods/。
+    modCompileOnly "com.terraformersmc:modmenu:${project.modmenu_version}"
+    modCompileOnly "me.shedaniel.cloth:cloth-config-fabric:${project.cloth_config_version}"
+    implementation files(new File(minecraftLibraries, 'com/ibm/icu/icu4j/73.2/icu4j-73.2.jar'))
+    implementation files(new File(minecraftLibraries, 'it/unimi/dsi/fastutil/8.5.12/fastutil-8.5.12.jar'))
+    // 玩家第三人称互动姿态 Mixin 的编译期 refmap 处理器；运行时由 Fabric Loader 提供。
+    annotationProcessor files(mixinProcessorJar)
+    clientAnnotationProcessor files(mixinProcessorJar)
+    testAnnotationProcessor files(mixinProcessorJar)
+
+    // ProGuard：内测版代码混淆（仅构建期工具，不进入模组依赖）
+    proguard 'com.guardsquare:proguard-base:7.6.1'
+}
+
+processResources {
+    inputs.property 'version', project.version
+    filesMatching('fabric.mod.json') { expand version: project.version }
+    // 将项目根目录 pifu/ 中的 64x64 Minecraft 皮肤作为可选择的内置资源打进 JAR。
+    from('pifu') {
+        include '*.png'
+        into 'assets/shabao_ai/textures/entity/skins'
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.release = 21
+}
+
+java {
+    withSourcesJar()
+    toolchain.languageVersion = JavaLanguageVersion.of(21)
+}
+
+jar {
+    from('LICENSE') { rename { "${it}_${project.base.archivesName.get()}" } }
+}
+
+// ============================================================================
+// 构建 Profile 门（P0 修复）：自用版 vs 保护版的字节码分离
+// ----------------------------------------------------------------------------
+// 背景：GuardCore 的 IntegrityState 状态机下 isTampered() = STATE != VERIFIED，
+//       若"缺 manifest 只 return 不置位"，STATE 恒为 UNVERIFIED → 自用版被误锁，
+//       且"缺 manifest 就放行"会让保护版删清单直接绕过校验（fail-open）。
+// 方案：把"是否强制完整性校验"做成编译期常量 BuildInfo.PROTECTED_BUILD：
+//  - 自用版（默认，无需参数）：false → GuardCore 启动直接置 VERIFIED，跳过校验；
+//  - 保护版（-PbuildProfile=protected）：true → GuardCore 强制验签，失败锁定。
+// 该常量被 javac 内联进 GuardCore.check()：删 BuildInfo 类/改清单都无法绕过。
+// ============================================================================
+def buildProfile = project.findProperty('buildProfile') ?: 'self-use'
+if (buildProfile != 'self-use' && buildProfile != 'protected') {
+    throw new GradleException("未知 buildProfile '${buildProfile}'（可选：self-use / protected）")
+}
+def isProtectedBuild = (buildProfile == 'protected')
+
+// 编译前生成 BuildInfo.java（固定包名/类名，值随 profile 变化）
+tasks.register('generateBuildInfo') {
+    def outFile = layout.buildDirectory.file(
+            'generated/buildinfo/cn/shabaoai/companion/build/BuildInfo.java').get().asFile
+    inputs.property('buildProfile', buildProfile)
+    outputs.file(outFile)
+    doLast {
+        outFile.parentFile.mkdirs()
+        outFile.text = """package cn.shabaoai.companion.build;
+
+/**
+ * 【构建 Profile 标记】由 build.gradle 的 generateBuildInfo 任务在编译前生成，请勿手工修改。
+ * <p>构建时由 -PbuildProfile 决定：</p>
+ * <ul>
+ *   <li>self-use（默认）：PROTECTED_BUILD=false，GuardCore 跳过完整性校验，AI 直接可用；</li>
+ *   <li>protected：PROTECTED_BUILD=true，GuardCore 强制执行 obf_manifest.dat 完整性校验
+ *       （Ed25519 验签 + 逐条哈希 + 时间锁），任一失败即锁定 AI。</li>
+ * </ul>
+ * <p>该值为编译期常量，会被 javac 内联进 GuardCore.check()：删掉本类/改值都无法绕过保护版门禁。</p>
+ */
+public final class BuildInfo {
+    /** 是否受保护分发构建（true 时 GuardCore 强制执行完整性校验） */
+    public static final boolean PROTECTED_BUILD = ${isProtectedBuild};
+    /** 构建 profile 名称（self-use / protected） */
+    public static final String BUILD_PROFILE = "${buildProfile}";
+
+    private BuildInfo() {}
+}
+"""
+    }
+}
+
+// BuildInfo.java 纳入 main 编译源
+sourceSets {
+    main {
+        java {
+            srcDir layout.buildDirectory.dir('generated/buildinfo').get().asFile
+        }
+    }
+}
+
+tasks.named('compileJava') {
+    dependsOn 'generateBuildInfo'
+    // BuildInfo 常量被 javac 内联进 GuardCore：增量编译可能复用旧字节码导致 profile 错配
+    // （本次 P0 回归的根源），因此每次编译都全量重编译，确保字节码与当前 profile 严格一致。
+    outputs.upToDateWhen { false }
+}
+
+// ============================================================================
+// 防篡改·加密内测版（仅内测分发用；日常 build/测试仍用上面的普通版 jar）
+// ----------------------------------------------------------------------------
+// 流程：javac 编译 tools/BuildTools.java（与 ObfXor 同算法的独立工具，不参与模组编译）
+//       -> internalJar 读取普通 jar，对全部 cn/shabaoai/companion/** 类计算 SHA-256，
+//          组装 JSON 清单并 XOR 加密，以 obf_manifest.dat 注入新 jar。
+// 产物：build/libs/shabao-ai-companion-<版本>-internal.jar
+// 注意：内测/公测加密包必须用 -PbuildProfile=protected 构建，否则打进 jar 的
+//       GuardCore 是"跳过校验"的自用版字节码，注入清单形同虚设（同本次 P0 回归）。
+// ============================================================================
+
+// 编译构建期工具（tools/*.java，javac 自身展开通配符）
+tasks.register('compileBuildTools', Exec) {
+    def outDir = layout.buildDirectory.dir('buildtools').get().asFile
+    doFirst { outDir.mkdirs() }
+    commandLine 'javac', '-encoding', 'UTF-8', '-d', outDir.absolutePath, 'tools/*.java'
+}
+
+// ============================================================================
+// ProGuard 代码混淆（仅内测版）：保留 Minecraft/Fabric 集成点与 Gson 反射字段，
+// 混淆 ai 包内部逻辑的成员名，提高逆向/篡改成本。
+// 输入 remapJar 产物（intermediary 映射，与 .minecraft/libraries 的 library 匹配）。
+// ============================================================================
+tasks.register('proguardJar') {
+    dependsOn 'remapJar'
+    doLast {
+        def cfgDir = layout.buildDirectory.dir('proguard').get().asFile
+        cfgDir.mkdirs()
+        def cfg = new File(cfgDir, 'proguard.pro')
+        def appData = System.getenv('APPDATA') ?: System.getProperty('user.home')
+        def libsDir = new File(appData, '.minecraft/libraries')
+        // ProGuard 通配符不适用于目录（字面量报错），改为枚举全部依赖 jar 拼接 classpath
+        def libJars = []
+        if (libsDir.isDirectory()) {
+            libsDir.eachFileRecurse { if (it.name.endsWith('.jar')) libJars << it.absolutePath.replace('\\', '/') }
+        }
+        def inJar = tasks.remapJar.archiveFile.get().asFile.absolutePath.replace('\\', '/')
+        def outJar = layout.buildDirectory.file("libs/${project.base.archivesName.get()}-${project.version}-obf.jar")
+                .get().asFile.absolutePath.replace('\\', '/')
+        // 【v22·构建级随机化】每次构建生成独立的随机混淆字典 + 随机 repackage 包名：
+        //  - 字典变化 → 类名/成员名映射完全重排（ProGuard 7.6.1 无 -randomizationseed，
+        //    用 -obfuscationdictionary 达到同等效果）
+        //  - repackageclasses 归入随机包名 → 包布局随构建漂移
+        // 效果：同一份源码的两次构建产物结构完全不同，攻击者拿旧版 jar 做 structural diff
+        // 无法把"旧 a/d.class ≈ AgentExecutor"的语义标签直接继承到新版（每次构建都是新布局）。
+        def rnd = new Random(System.currentTimeMillis() ^ System.nanoTime())
+        def alphabet = ('a'..'z') as List
+        def repkg = (1..rnd.nextInt(2) + 2).collect { alphabet[rnd.nextInt(26)] }.join()
+        // 随机混淆字典：300 个 1-3 位小写 token，避开 Java 关键字（ProGuard 不允许关键字作混淆名）
+        def reserved = ['abstract','assert','boolean','break','byte','case','catch','char','class','const',
+                        'continue','default','do','double','else','enum','extends','final','finally','float',
+                        'for','goto','if','implements','import','instanceof','int','interface','long','native',
+                        'new','package','private','protected','public','return','short','static','strictfp',
+                        'super','switch','synchronized','this','throw','throws','transient','try','void',
+                        'volatile','while','true','false','null','var','record','yield','sealed','permits']
+        def dictWords = new java.util.LinkedHashSet<String>()
+        while (dictWords.size() < 300) {
+            int len = 1 + rnd.nextInt(3)
+            def w = (1..len).collect { alphabet[rnd.nextInt(26)] }.join()
+            if (reserved.contains(w)) continue
+            dictWords.add(w)
+        }
+        def dictFile = new File(cfgDir, 'obf_dict.txt')
+        dictFile.text = dictWords.join('\n')
+        cfg.text = """# 由 build.gradle 动态生成（路径注入），勿手工修改
+-injars ${inJar}
+-outjars ${outJar}
+-libraryjars ${libJars.join(';')}
+-printmapping ${cfgDir}/mapping.txt
+
+# 构建级随机化：随机字典 + 随机包名（每次构建全变，防旧版 jar 映射继承）
+-obfuscationdictionary ${dictFile.absolutePath.replace('\\', '/')}
+-repackageclasses ${repkg}
+
+# 保守策略：不收缩、不优化，只做重命名混淆（防行为差异）
+-dontshrink
+-dontoptimize
+-allowaccessmodification
+-dontnote
+-dontwarn
+-ignorewarnings
+
+# 调试信息策略：只保留行号（崩溃可定位），删除 SourceFile/LocalVariableTable 等元数据
+# ——SourceFile 会把混淆后的类名直接映射回 AgentExecutor.java，名称混淆效果减半；
+#    LocalVariableTable 等 Debug 段含原始局部变量名，ProGuard 默认不保留，这里不显式开启。
+-keepattributes LineNumberTable
+
+# ---- 入口类（fabric.mod.json 引用，必须保留类名）----
+-keep public class cn.shabaoai.companion.ShabaoAiMod
+-keep public class cn.shabaoai.companion.client.ShabaoAiClient
+-keep public class cn.shabaoai.companion.client.ShabaoAiModMenu
+
+# ---- Minecraft/Fabric 集成类：整类保留（类名+成员名）----
+-keep class cn.shabaoai.companion.entity.** { *; }
+-keep class cn.shabaoai.companion.client.** { *; }
+-keep class cn.shabaoai.companion.mixin.** { *; }
+-keep class cn.shabaoai.companion.net.** { *; }
+
+# ---- Gson 反射序列化（字段名=JSON key）：config 整类保留 ----
+-keep class cn.shabaoai.companion.config.** { *; }
+
+# ---- protect 包【不保留】：GuardCore/ObfXor 的类名/成员名全部混淆 ----
+# 语义名（GuardCore.isTampered/ObfXor.de）是逆向者最醒目的锚点，必须隐藏。
+# ProGuard 会同步重写 ShabaoAiMod/ai 包对它们的全部引用，同一 jar 内一致即可。
+# 唯一例外：BuildMemory 的 Gson record 字段（见下方 keepclassmembers）。
+
+# ---- ai 包内部逻辑：类名 + 成员名全部混淆（最高混淆强度）----
+# 仅例外：BuildMemory 记忆 record 由 Gson 从 JSON 文件反序列化，record 字段/组件必须保留
+# 注意：不要用 BuildMemory 的通配符形式（会让 ProGuard 把整个 ai 包的类名一并保留）
+-keepclassmembers class cn.shabaoai.companion.ai.BuildMemory\$PlayerMemory { *; }
+-keepclassmembers class cn.shabaoai.companion.ai.BuildMemory\$BuildRecord { *; }
+-keepclassmembers class cn.shabaoai.companion.ai.BuildMemory\$BlockRecord { *; }
+-keepclassmembers class cn.shabaoai.companion.ai.RelationshipManager\$Profile { *; }
+# 这些枚举名是持久化 JSON、工具参数和 LLM Runtime Context 的协议值，不能改名。
+-keep enum cn.shabaoai.companion.ai.RelationshipManager\$Status { *; }
+-keep enum cn.shabaoai.companion.ai.RelationshipManager\$InteractionPolicy { *; }
+-keep enum cn.shabaoai.companion.ai.RelationshipManager\$InitiativeLevel { *; }
+-keep enum cn.shabaoai.companion.ai.InteractionManager\$Type { *; }
+-keep enum cn.shabaoai.companion.ai.InteractionManager\$Phase { *; }
+"""
+        javaexec {
+            classpath = configurations.proguard
+            mainClass = 'proguard.ProGuard'
+            args "@${cfg.absolutePath}"
+        }
+    }
+}
+
+// 字节码验证：用 JVM 加载混淆 jar 所有类，捕获 VerifyError（防 ProGuard 生成非法字节码）
+tasks.register('verifyObf', JavaExec) {
+    dependsOn 'compileBuildTools', 'proguardJar'
+    def libsDir = new File(System.getenv('APPDATA') ?: System.getProperty('user.home'), '.minecraft/libraries')
+    def allJars = []
+    if (libsDir.isDirectory()) libsDir.eachFileRecurse { if (it.name.endsWith('.jar')) allJars << it }
+    def obfJar = layout.buildDirectory.file("libs/${project.base.archivesName.get()}-${project.version}-obf.jar")
+    // classpath 必须含被验证的 obf.jar + 全部依赖，否则依赖缺失类无法触发字节码验证
+    classpath = files(layout.buildDirectory.dir('buildtools').get().asFile) + files(allJars) + files(obfJar)
+    mainClass = 'ByteVerify'
+    args obfJar.get().asFile.absolutePath
+}
+
+// 混淆运行时冒烟测试：驱动混淆 jar 的 fromToolCalls，验证 tool-calling 链路在混淆后可用
+tasks.register('obfSmokeTest', JavaExec) {
+    dependsOn 'compileBuildTools', 'proguardJar'
+    def libsDir = new File(System.getenv('APPDATA') ?: System.getProperty('user.home'), '.minecraft/libraries')
+    def allJars = []
+    if (libsDir.isDirectory()) libsDir.eachFileRecurse { if (it.name.endsWith('.jar')) allJars << it }
+    def obfJar = layout.buildDirectory.file("libs/${project.base.archivesName.get()}-${project.version}-obf.jar")
+    classpath = files(layout.buildDirectory.dir('buildtools').get().asFile) + files(allJars) + files(obfJar)
+    mainClass = 'ObfSmokeTest'
+    args obfJar.get().asFile.absolutePath
+}
+
+// 生成/复用 Ed25519 签名密钥对（幂等）：internalJar 签名清单前置步骤。
+// 私钥仅存 keys/ed25519_private.pem（已 gitignore，不入库），公钥内嵌 GuardCore 验签。
+tasks.register('genSigningKeys', Exec) {
+    dependsOn 'compileBuildTools'
+    def outDir = layout.buildDirectory.dir('buildtools').get().asFile
+    commandLine 'java', '-cp', outDir.absolutePath, 'BuildTools', 'genkeys'
+}
+
+// 生成加密内测版 jar：在混淆后的 jar 上注入 Ed25519 签名完整性清单（SHA-256 + 签名 + 过期锁）
+tasks.register('internalJar', Exec) {
+    dependsOn 'compileBuildTools', 'genSigningKeys', 'verifyObf', 'obfSmokeTest'
+    def outDir = layout.buildDirectory.dir('libs').get().asFile
+    doFirst {
+        if (!isProtectedBuild) {
+            throw new GradleException('internalJar 需要保护版字节码：请用 -PbuildProfile=protected 构建'
+                    + '（否则打进 jar 的 GuardCore 是跳过校验的自用版，清单形同虚设）')
+        }
+        def inJar = layout.buildDirectory.file("libs/${project.base.archivesName.get()}-${project.version}-obf.jar")
+                .get().asFile.absolutePath
+        def outJar = new File(outDir, "${project.base.archivesName.get()}-${project.version}-internal.jar").absolutePath
+        // 内测版授权有效期：gradle.properties 的 internal_expire_days（默认 30 天）
+        def days = (project.findProperty('internal_expire_days') ?: '30') as int
+        def expire = java.time.LocalDate.now().plusDays(days).toString()
+        commandLine 'java', '-cp', layout.buildDirectory.dir('buildtools').get().asFile.absolutePath,
+                'BuildTools', 'manifest', inJar, outJar, expire
+    }
+}
+
+// 加密公测版：复用经过验证的混淆、Ed25519 签名清单与时间锁，不改变运行时加解密协议。
+def publicBetaJarFile = layout.buildDirectory.file(
+        "libs/${project.base.archivesName.get()}-${project.version}-public-beta.jar")
+
+tasks.register('publicBetaJar', Exec) {
+    dependsOn 'compileBuildTools', 'genSigningKeys', 'verifyObf', 'obfSmokeTest'
+    doFirst {
+        if (!isProtectedBuild) {
+            throw new GradleException('publicBetaJar 需要保护版字节码：请用 -PbuildProfile=protected 构建'
+                    + '（否则打进 jar 的 GuardCore 是跳过校验的自用版，清单形同虚设）')
+        }
+        def inJar = layout.buildDirectory.file(
+                "libs/${project.base.archivesName.get()}-${project.version}-obf.jar").get().asFile.absolutePath
+        def days = (project.findProperty('public_beta_expire_days') ?: '90') as int
+        if (days < 1) throw new GradleException('public_beta_expire_days 必须大于 0')
+        def expire = java.time.LocalDate.now().plusDays(days).toString()
+        commandLine 'java', '-cp', layout.buildDirectory.dir('buildtools').get().asFile.absolutePath,
+                'BuildTools', 'manifest', inJar, publicBetaJarFile.get().asFile.absolutePath, expire
+    }
+}
+
+// 成品验签门禁：签名、授权日期以及清单内每个 class/关键资源哈希必须全部匹配。
+tasks.register('verifyPublicBetaIntegrity', JavaExec) {
+    dependsOn 'publicBetaJar'
+    classpath = files(layout.buildDirectory.dir('buildtools').get().asFile)
+    mainClass = 'VerifyIntegrity'
+    args 'pass', publicBetaJarFile.get().asFile.absolutePath
+}
+
+// 主动篡改门禁：修改受保护的 fabric.mod.json 后，校验器必须拒绝该副本。
+tasks.register('verifyPublicBetaTamperRejection', JavaExec) {
+    dependsOn 'publicBetaJar'
+    classpath = files(layout.buildDirectory.dir('buildtools').get().asFile)
+    mainClass = 'VerifyIntegrity'
+    args 'tamper', publicBetaJarFile.get().asFile.absolutePath, 'fabric.mod.json'
+    doLast {
+        // 负向测试副本只用于校验，不留在可分发产物目录，避免玩家误装。
+        project.delete(publicBetaJarFile.get().asFile.absolutePath.replace('.jar', '.tampered.jar'))
+    }
+}
+
+// P0 攻击回归门禁：直接删除签名清单后必须拒绝，禁止恢复“无清单就放行”。
+tasks.register('verifyPublicBetaMissingManifestRejection', JavaExec) {
+    dependsOn 'publicBetaJar'
+    classpath = files(layout.buildDirectory.dir('buildtools').get().asFile)
+    mainClass = 'VerifyIntegrity'
+    args 'remove', publicBetaJarFile.get().asFile.absolutePath, 'obf_manifest.dat'
+    doLast {
+        project.delete(publicBetaJarFile.get().asFile.absolutePath.replace('.jar', '.removed.jar'))
+    }
+}
+
+// 公测发布唯一入口：只有完整成品验签与篡改拒绝测试都通过，任务才会成功。
+tasks.register('publicBetaRelease') {
+    dependsOn 'verifyPublicBetaIntegrity', 'verifyPublicBetaTamperRejection',
+            'verifyPublicBetaMissingManifestRejection'
+    doFirst {
+        if (!isProtectedBuild) {
+            throw new GradleException('publicBetaRelease 需要保护版字节码：请用 -PbuildProfile=protected 构建')
+        }
+    }
+}

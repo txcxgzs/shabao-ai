@@ -1,0 +1,10 @@
+            {"thought":"建2层公寓骨架示例，楼板Y=63","action":"build_plan","args":{"steps":[
+            {"name":"地基15x15","shape":"fill","x1":271,"y1":63,"z1":-161,"x2":285,"y2":63,"z2":-147,"block":"stone_bricks"},
+            {"name":"1层墙","shape":"wall","x1":271,"y1":64,"z1":-161,"x2":285,"y2":67,"z2":-147,"block":"stone_bricks"},
+            {"name":"正门","shape":"door","x1":278,"y1":64,"z1":-161,"facing":"south","block":"oak_door"},
+            {"name":"1层窗","blocks":[[281,65,-161,"glass"],[281,66,-161,"glass"],[275,65,-161,"glass"],[275,66,-161,"glass"]]},
+            {"name":"1层光源","blocks":[[278,67,-154,"glowstone"]]},
+            {"name":"2层楼板带楼梯井","shape":"floor","x1":271,"y1":68,"z1":-161,"x2":285,"z2":-147,"hx1":273,"hz1":-159,"hx2":274,"hz2":-158,"block":"oak_planks"},
+            {"name":"2层墙","shape":"wall","x1":271,"y1":69,"z1":-161,"x2":285,"y2":72,"z2":-147,"block":"stone_bricks"},
+            {"name":"1-2层螺旋楼梯","shape":"spiral","x":273,"y":64,"z":-159,"height":5,"block":"oak_stairs"}
+            ]}}

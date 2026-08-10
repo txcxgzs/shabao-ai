@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "id": "shabao_ai",
+  "version": "${version}",
+  "name": "Shabao AI Companion",
+  "description": "A real in-world AI companion with pluggable LLM, ASR, TTS and animated building.",
+  "authors": [
+    "Shabao AI"
+  ],
+  "license": "MIT",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "cn.shabaoai.companion.ShabaoAiMod"
+    ],
+    "client": [
+      "cn.shabaoai.companion.client.ShabaoAiClient"
+    ],
+    "modmenu": [
+      "cn.shabaoai.companion.client.ShabaoAiModMenu"
+    ]
+  },
+  "mixins": [
+    {
+      "config": "shabao_ai.client.mixins.json",
+      "environment": "client"
+    }
+  ],
+  "depends": {
+    "fabricloader": ">=0.16.0",
+    "minecraft": "~1.21.1",
+    "java": ">=21",
+    "fabric-api": "*",
+    "cloth-config": ">=15.0.0"
+  },
+  "suggests": {
+    "modmenu": ">=11.0.0"
+  },
+  "custom": {
+    "modmenu": {
+      "badges": [
+        "client"
+      ]
+    }
+  }
+}

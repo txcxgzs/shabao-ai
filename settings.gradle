@@ -1,0 +1,25 @@
+pluginManagement {
+    repositories {
+        maven { url = 'https://bmclapi2.bangbang93.com/maven/' }
+        maven { url = 'https://maven.aliyun.com/repository/public/' }
+        maven { url = 'https://maven.fabricmc.net/' }
+        gradlePluginPortal()
+        mavenCentral()
+    }
+}
+
+plugins {
+    id 'org.gradle.toolchains.foojay-resolver-convention' version '0.8.0'
+}
+
+dependencyResolutionManagement {
+    repositoriesMode = RepositoriesMode.PREFER_PROJECT
+    repositories {
+        maven { url = 'https://bmclapi2.bangbang93.com/maven/' }
+        maven { url = 'https://maven.aliyun.com/repository/public/' }
+        maven { url = 'https://maven.fabricmc.net/' }
+        mavenCentral()
+    }
+}
+
+rootProject.name = 'shabao-ai-companion'

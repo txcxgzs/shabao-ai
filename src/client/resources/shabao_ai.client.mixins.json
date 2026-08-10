@@ -1,0 +1,12 @@
+{
+  "required": true,
+  "package": "cn.shabaoai.companion.mixin.client",
+  "compatibilityLevel": "JAVA_21",
+  "refmap": "shabao_ai.client.refmap.json",
+  "client": [
+    "PlayerEntityModelMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

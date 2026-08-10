@@ -1,0 +1,34 @@
+# Build
+build/
+buildtools/
+.gradle/
+out/
+*.jar
+!gradle/wrapper/gradle-wrapper.jar
+
+# Media & test assets (never commit)
+*.mp4
+pifu/
+
+# IDE
+.idea/
+*.iml
+.settings/
+.classpath
+.project
+
+# AI assistant local specs
+.trae/
+
+# Logs
+logs/
+*.log
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Secrets (NEVER commit)
+config/shabao-ai.json
+shabao-ai-memory/
+keys/
