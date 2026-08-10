@@ -39,7 +39,19 @@
 
 ## 🛠️ 安装
 
-**想直接玩？** 去 [Releases](https://github.com/txcxgzs/shabao-ai/releases) 下载最新版 JAR，连同 Fabric Loader、Fabric API、ModMenu、Cloth Config 一起放进 `mods/` 文件夹即可。首次启动生成 `config/shabao-ai.json`，配置请在游戏内模组菜单里编辑。
+**想直接玩？** 去 [Releases](https://github.com/txcxgzs/shabao-ai/releases) 下载最新版 JAR，放进 `mods/` 文件夹即可。首次启动生成 `config/shabao-ai.json`，配置请在游戏内模组菜单里编辑。
+
+### 依赖模组（安装前请备齐）
+
+| 模组 | 版本要求 | 必需 | 用途 |
+|---|---|---|---|
+| Minecraft | 1.21.1 | 必需 | 游戏本体版本 |
+| Fabric Loader | 0.19.3+ | 必需 | Fabric 加载器（安装器会一并装好） |
+| Fabric API | 0.116.x | 必需 | 核心 API，本模组强依赖 |
+| Cloth Config | ≥ 15.0.0 | 必需 | 游戏内配置界面（本模组强依赖） |
+| ModMenu | ≥ 11.0.0 | 推荐 | 模组列表 + 配置入口（装了才能直接在模组菜单里改配置） |
+
+> 用 [Modrinth App](https://modrinth.com/app) 或 Prism Launcher 一键安装时，把本模组的依赖勾上即可自动补齐；手动安装时记得单独下载上面的 Fabric API 与 Cloth Config。
 
 **开发者自行构建**（不建议普通玩家使用）：环境要求 Java 21、Fabric Loader 0.19.3+、Fabric API 0.116.x、ModMenu + Cloth Config ≥ 15.0.0。
 
