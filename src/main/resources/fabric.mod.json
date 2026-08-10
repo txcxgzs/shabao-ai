@@ -8,6 +8,7 @@
     "Shabao AI"
   ],
   "license": "MIT",
+  "icon": "assets/shabao_ai/icon.png",
   "environment": "*",
   "entrypoints": {
     "main": [
