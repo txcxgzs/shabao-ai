@@ -5,9 +5,14 @@
   "name": "Shabao AI Companion",
   "description": "A real in-world AI companion with pluggable LLM, ASR, TTS and animated building.",
   "authors": [
-    "Shabao AI"
+    "txcxgzs"
   ],
-  "license": "MIT",
+  "contact": {
+    "homepage": "https://github.com/txcxgzs/shabao-ai",
+    "sources": "https://github.com/txcxgzs/shabao-ai",
+    "issues": "https://github.com/txcxgzs/shabao-ai/issues"
+  },
+  "license": "AGPL-3.0",
   "icon": "assets/shabao_ai/icon.png",
   "environment": "*",
   "entrypoints": {
