@@ -1,6 +1,7 @@
-# Build
-build/
-buildtools/
+# Build（锚定仓库根目录：仅忽略 Gradle 输出 build/ 与根级 buildtools/ 编译产物，
+# 不可误伤源码包 src/main/java/cn/shabaoai/companion/build/）
+/build/
+/buildtools/
 .gradle/
 out/
 *.jar
