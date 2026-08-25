@@ -26,6 +26,8 @@
   "tooltip.shabao_ai.asrKey": "留空则保持已保存的密钥。",
   "field.shabao_ai.asrLanguage": "ASR 语言，例如 zh",
   "tooltip.shabao_ai.asrLanguage": "符合 BCP-47 规范，例如 zh、en-US。",
+  "field.shabao_ai.asrAuthType": "ASR 认证方式",
+  "tooltip.shabao_ai.asrAuthType": "语音端点认证头：api-key（Azure 风格，默认）或 Bearer（OpenAI 兼容）。默认 MiMo 端点用 api-key；多数第三方兼容端点用 Bearer。",
   "section.shabao_ai.tts": "—— 语音合成 (TTS) ——",
   "field.shabao_ai.ttsBase": "TTS Base URL",
   "tooltip.shabao_ai.ttsBase": "默认 https://api.xiaomimimo.com/v1；换端点时需保证其 chat/completions 返回 choices[0].message.audio.data 的 base64 WAV。",
@@ -36,6 +38,8 @@
   "field.shabao_ai.ttsVoice": "TTS 音色",
   "field.shabao_ai.ttsInstruction": "TTS 语气提示词",
   "tooltip.shabao_ai.ttsInstruction": "用于控制合成时的语气、风格。",
+  "field.shabao_ai.ttsAuthType": "TTS 认证方式",
+  "tooltip.shabao_ai.ttsAuthType": "语音端点认证头：api-key（Azure 风格，默认）或 Bearer（OpenAI 兼容）。默认 MiMo 端点用 api-key；多数第三方兼容端点用 Bearer。",
 
   "desc.shabao_ai.roleIdentity": "你可以改变 AI 的称呼和对外角色名；它的核心身份始终是 shabao，由 txcxgzs(ban) 打造。",
   "field.shabao_ai.companionName": "AI 角色名字",

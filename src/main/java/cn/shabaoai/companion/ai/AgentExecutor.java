@@ -357,9 +357,10 @@ public final class AgentExecutor {
                 // legacy 非 null：等它完成/被取消后再 complete（两个 Lane 的串行纪律不破）。
                 if (legacy != null) {
                     legacy.whenComplete((r, e) -> applyDone.complete(null));
-                } else {
-                    applyDone.complete(null);
+                    return;
                 }
+                // 【BUG-01 修复】无 legacy（含过期 return、异常、正常空走）时在此 complete。
+                applyDone.complete(null);
             });
         } catch (Exception e) {
             // 服务端关闭等极端情况：分发失败只记日志，不抛给事件消费循环
@@ -2610,6 +2611,15 @@ public final class AgentExecutor {
                                                         int step,
                                                         ModConfig config,
                                                         SessionState state) {
+        // 【BUG-02】生存模式建造门控：非创造模式且未开启 allowSurvivalBuilding 时拒绝整个建造，
+        // 覆盖其下 clearTerrain 旁路与 executePlaceBatch 调用，避免 AI 无消耗修改生存世界。
+        if (!player.isCreative() && !config.allowSurvivalBuilding) {
+            AgentLogger.logAction(step, "BUILD_PLAN_REJECTED",
+                    "生存模式未开启 allowSurvivalBuilding，拒绝建造");
+            return CompletableFuture.completedFuture(
+                    "当前为生存模式且未开启生存建造（allowSurvivalBuilding=false），已拒绝。"
+                            + "请在配置中开启该选项或切换创造模式。");
+        }
         // 总方块数上限检查：防止 LLM 一次返回过多方块导致卡顿
         int totalBlocks = 0;
         for (var s : steps) totalBlocks += s.offsets().size();
@@ -3426,6 +3436,15 @@ public final class AgentExecutor {
                                                          int step,
                                                          ModConfig config,
                                                          SessionState state) {
+        // 【BUG-02】生存模式建造门控：place 动作与 build_plan 共用此入口，
+        // 非创造模式且未开启 allowSurvivalBuilding 时拒绝，避免 AI 无消耗修改生存世界。
+        if (!player.isCreative() && !config.allowSurvivalBuilding) {
+            AgentLogger.logAction(step, "PLACE_REJECTED",
+                    "生存模式未开启 allowSurvivalBuilding，拒绝放置");
+            return CompletableFuture.completedFuture(
+                    "当前为生存模式且未开启生存建造（allowSurvivalBuilding=false），已拒绝。"
+                            + "请在配置中开启该选项或切换创造模式。");
+        }
         // 【M6】place 动作也要过 maxBuildBlocks 上限（build_plan 有检查，place 是绕过路径），
         // 防止 LLM 一次返回超大 blocks 数组卡死主线程
         // 【修W】床自动补全：与 build_plan 循环一致，place 动作的床也只写一个坐标，

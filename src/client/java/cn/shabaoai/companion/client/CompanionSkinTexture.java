@@ -42,6 +42,8 @@ final class CompanionSkinTexture {
     private static long nextCheckAt;
     private static Identifier dynamicTexture;
     private static String lastErrorKey = "";
+    // 【BUG-03】缓存内置皮肤资源存在性结论，与 activeKey 配对：key 变化才重查，避免每帧 getResource。
+    private static boolean builtInExists = true;
 
     private CompanionSkinTexture() {}
 
@@ -56,13 +58,25 @@ final class CompanionSkinTexture {
         long now = System.nanoTime();
 
         if (!config.customSkinEnabled || pathText.isBlank()) {
-            if (!key.equals(activeKey)) clearDynamicTexture();
-            activeKey = key;
-            activeModified = Long.MIN_VALUE;
-            return builtInTexture;
+            // 【BUG-03】内置皮肤分支：资源缺失时回退调用方传入的 fallback（Steve），
+            // 而非返回不存在的 builtInTexture 导致紫黑方块。存在性结论按 activeKey 缓存，
+            // 仅在 key 变化（切换皮肤/开关）时重查，避免每帧 getTexture 都走 ResourceManager。
+            if (!key.equals(activeKey)) {
+                clearDynamicTexture();
+                activeKey = key;
+                activeModified = Long.MIN_VALUE;
+                builtInExists = MinecraftClient.getInstance().getResourceManager()
+                        .getResource(builtInTexture).isPresent();
+                if (!builtInExists) {
+                    reportOnce(key, "内置皮肤 " + builtInFile + " 未找到，已回退 Steve", null);
+                }
+            }
+            return builtInExists ? builtInTexture : fallback;
         }
         if (key.equals(activeKey) && now < nextCheckAt) {
-            return dynamicTexture == null ? builtInTexture : dynamicTexture;
+            // 【BUG-03】自定义皮肤尚未加载（dynamicTexture==null）时回退 Steve，
+            // 而非返回不存在的 builtInTexture 导致紫黑方块。
+            return dynamicTexture == null ? fallback : dynamicTexture;
         }
 
         Path path;
@@ -74,7 +88,8 @@ final class CompanionSkinTexture {
             activeKey = key;
             nextCheckAt = now + CHECK_INTERVAL_NANOS;
             reportOnce(key, "无效的皮肤路径: " + pathText, e);
-            return builtInTexture;
+            // 【BUG-03】路径无效时回退 Steve，而非不存在的 builtInTexture。
+            return fallback;
         }
 
         nextCheckAt = now + CHECK_INTERVAL_NANOS;
@@ -122,8 +137,9 @@ final class CompanionSkinTexture {
             if (!key.equals(activeKey)) clearDynamicTexture();
             activeKey = key;
             activeModified = Long.MIN_VALUE;
-            reportOnce(key + "|" + path, "外部伙伴皮肤加载失败，已回退所选内置皮肤: " + path, e);
-            return builtInTexture;
+            reportOnce(key + "|" + path, "外部伙伴皮肤加载失败，已回退 Steve: " + path, e);
+            // 【BUG-03】自定义皮肤加载失败时回退 Steve，而非不存在的 builtInTexture。
+            return fallback;
         }
     }
 
@@ -137,6 +153,10 @@ final class CompanionSkinTexture {
     private static void reportOnce(String key, String message, Exception error) {
         if (key.equals(lastErrorKey)) return;
         lastErrorKey = key;
-        LOGGER.warn(message + " ({})", error.getMessage());
+        if (error != null) {
+            LOGGER.warn(message + " ({})", error.getMessage());
+        } else {
+            LOGGER.warn(message);
+        }
     }
 }

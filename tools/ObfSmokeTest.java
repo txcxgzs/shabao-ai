@@ -39,8 +39,9 @@ public final class ObfSmokeTest {
 
     private ObfSmokeTest() {}
 
-    /** 定位 ToolCall 混淆类：record 且构造器为 (String,String,String)；找不到返回 null */
-    private static Class<?> findToolCall(JarFile jar) {
+    /** 定位 ToolCall 混淆类：record 且构造器为 (String,String,String)；找不到返回 null。
+     *  loadFailed[0] 在扫描中遇到 Class.forName 抛异常（本机依赖缺失）时置 true。 */
+    private static Class<?> findToolCall(JarFile jar, boolean[] loadFailed) {
         var it = jar.entries();
         while (it.hasMoreElements()) {
             String n = it.nextElement().getName();
@@ -56,7 +57,8 @@ public final class ObfSmokeTest {
                     }
                 }
             } catch (Throwable ignored) {
-                // 依赖缺失的类跳过
+                // 依赖缺失的类跳过，但标记本次扫描受环境限制
+                loadFailed[0] = true;
             }
         }
         return null;
@@ -72,8 +74,9 @@ public final class ObfSmokeTest {
                 || cn.startsWith("cn.shabaoai.companion.ShabaoAiMod");
     }
 
-    /** 定位 AgentAction 混淆类：含嵌套 enum 且存在静态方法 (List)->List；找不到返回 null */
-    private static Class<?> findAgentAction(JarFile jar) {
+    /** 定位 AgentAction 混淆类：含嵌套 enum 且存在静态方法 (List)->List；找不到返回 null。
+     *  loadFailed[0] 在扫描中遇到 Class.forName 抛异常（本机依赖缺失）时置 true。 */
+    private static Class<?> findAgentAction(JarFile jar, boolean[] loadFailed) {
         var it = jar.entries();
         while (it.hasMoreElements()) {
             String n = it.nextElement().getName();
@@ -96,7 +99,8 @@ public final class ObfSmokeTest {
                     }
                 }
             } catch (Throwable ignored) {
-                // 依赖缺失的类跳过
+                // 依赖缺失的类跳过，但标记本次扫描受环境限制
+                loadFailed[0] = true;
             }
         }
         return null;
@@ -105,12 +109,23 @@ public final class ObfSmokeTest {
     public static void main(String[] args) throws Exception {
         String jarPath = new java.io.File(args[0]).getAbsolutePath();
         try (JarFile jar = new JarFile(jarPath)) {
-            Class<?> toolCall = findToolCall(jar);
-            Class<?> agentAction = findAgentAction(jar);
+            // 【BUG-05】区分两类 SKIP：loadFailed 跟踪本次扫描是否有类因本机依赖缺失而加载失败。
+            // 定位不到目标类时：若 loadFailed=true → 环境限制，SKIP（以 0 退出不阻塞构建）；
+            // 若 loadFailed=false → jar 内确实没有目标特征类（混淆策略异常/类被错误移除），FAIL。
+            boolean[] loadFailed = {false};
+            Class<?> toolCall = findToolCall(jar, loadFailed);
+            Class<?> agentAction = findAgentAction(jar, loadFailed);
             if (toolCall == null || agentAction == null) {
-                System.out.println("[ObfSmokeTest] SKIP: 未定位到混淆类（ToolCall=" + toolCall
-                        + " AgentAction=" + agentAction + "），本机依赖可能不完整，跳过运行验证");
-                return;
+                if (loadFailed[0]) {
+                    System.out.println("[ObfSmokeTest] SKIP: 未定位到混淆类（ToolCall=" + toolCall
+                            + " AgentAction=" + agentAction + "），本机依赖可能不完整，跳过运行验证");
+                    return;
+                }
+                // jar 内确实没有目标特征类：不是环境限制，而是混淆策略异常或目标类被移除
+                System.out.println("[ObfSmokeTest] FAIL: jar 内未定位到目标类且无依赖缺失"
+                        + "（ToolCall=" + toolCall + " AgentAction=" + agentAction
+                        + "），混淆策略可能异常");
+                System.exit(1);
             }
             System.out.println("[ObfSmokeTest] ToolCall=" + toolCall.getName()
                     + " AgentAction=" + agentAction.getName());

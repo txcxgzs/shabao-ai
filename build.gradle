@@ -171,6 +171,12 @@ tasks.named('compileJava') {
     outputs.upToDateWhen { false }
 }
 
+// sourcesJar 同样读取 generateBuildInfo 加入 main source set 的生成源文件，
+// 不声明依赖会导致 clean build 报 "uses this output without declaring dependency"。
+tasks.named('sourcesJar') {
+    dependsOn 'generateBuildInfo'
+}
+
 // ============================================================================
 // 防篡改·加密内测版（仅内测分发用；日常 build/测试仍用上面的普通版 jar）
 // ----------------------------------------------------------------------------

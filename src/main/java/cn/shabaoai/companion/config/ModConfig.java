@@ -50,8 +50,8 @@ public final class ModConfig {
             "lumen-skin-202608090636-77a41ad3.png");
 
     public Provider llm = new Provider("https://your-provider.example/v1", "", "your-model");
-    public Speech asr = new Speech("https://api.xiaomimimo.com/v1", "", "mimo-v2.5-asr", "", "zh", "");
-    public Speech tts = new Speech("https://api.xiaomimimo.com/v1", "", "mimo-v2.5-tts", "mimo_default", "", "用自然、活泼、像游戏伙伴一样的中文语气说话。自信但不要夸张。");
+    public Speech asr = new Speech("https://api.xiaomimimo.com/v1", "", "mimo-v2.5-asr", "", "zh", "", "api-key");
+    public Speech tts = new Speech("https://api.xiaomimimo.com/v1", "", "mimo-v2.5-tts", "mimo_default", "", "用自然、活泼、像游戏伙伴一样的中文语气说话。自信但不要夸张。", "api-key");
     public String companionName = DEFAULT_COMPANION_NAME;
     /** JAR 内置皮肤文件名；默认使用用户指定的 lumen 0622 版本。 */
     public String builtInSkin = DEFAULT_BUILT_IN_SKIN;
@@ -157,8 +157,8 @@ public final class ModConfig {
      */
     private void ensureDefaults() {
         if (llm == null) llm = new Provider("https://your-provider.example/v1", "", "your-model");
-        if (asr == null) asr = new Speech("https://api.xiaomimimo.com/v1", "", "mimo-v2.5-asr", "", "zh", "");
-        if (tts == null) tts = new Speech("https://api.xiaomimimo.com/v1", "", "mimo-v2.5-tts", "mimo_default", "", "用自然、活泼、像游戏伙伴一样的中文语气说话。");
+        if (asr == null) asr = new Speech("https://api.xiaomimimo.com/v1", "", "mimo-v2.5-asr", "", "zh", "", "api-key");
+        if (tts == null) tts = new Speech("https://api.xiaomimimo.com/v1", "", "mimo-v2.5-tts", "mimo_default", "", "用自然、活泼、像游戏伙伴一样的中文语气说话。", "api-key");
         companionName = normalizeCompanionNameOrDefault(companionName);
         if (builtInSkin == null || !BUILT_IN_SKINS.contains(builtInSkin)) {
             builtInSkin = DEFAULT_BUILT_IN_SKIN;
@@ -228,5 +228,5 @@ public final class ModConfig {
     }
 
     public record Provider(String baseUrl, String apiKey, String model) {}
-    public record Speech(String baseUrl, String apiKey, String model, String voice, String language, String instruction) {}
+    public record Speech(String baseUrl, String apiKey, String model, String voice, String language, String instruction, String authType) {}
 }

@@ -70,6 +70,8 @@ public final class ShabaoConfigScreen {
         holder.asrLanguage = original.asr.language();
         holder.ttsVoice = original.tts.voice();
         holder.ttsInstruction = original.tts.instruction();
+        holder.asrAuthType = blankToDefault(original.asr.authType(), "api-key");
+        holder.ttsAuthType = blankToDefault(original.tts.authType(), "api-key");
         holder.companionName = original.companionName;
         holder.builtInSkin = original.builtInSkin;
         holder.customSkinEnabled = original.customSkinEnabled;
@@ -213,6 +215,15 @@ public final class ShabaoConfigScreen {
                 .setTooltip(text("tooltip.shabao_ai.asrLanguage", "符合 BCP-47 规范，例如 zh、en-US。"))
                 .setSaveConsumer(v -> h.asrLanguage = v)
                 .build());
+        cat.addEntry(eb.startDropdownMenu(text("field.shabao_ai.asrAuthType", "ASR 认证方式"),
+                        h.asrAuthType, value -> value, v -> Text.literal(v))
+                .setSelections(java.util.List.of("api-key", "Bearer"))
+                .setDefaultValue("api-key")
+                .setTooltip(text("tooltip.shabao_ai.asrAuthType",
+                        "语音端点认证头：api-key（Azure 风格，默认）或 Bearer（OpenAI 兼容）。"
+                                + "默认 MiMo 端点用 api-key；多数第三方兼容端点用 Bearer。"))
+                .setSaveConsumer(v -> h.asrAuthType = v)
+                .build());
 
         // === TTS 段 ===
         cat.addEntry(eb.startTextDescription(text("section.shabao_ai.tts", "—— 语音合成 (TTS) ——")).build());
@@ -240,6 +251,15 @@ public final class ShabaoConfigScreen {
                 .setDefaultValue(original.tts.instruction())
                 .setTooltip(text("tooltip.shabao_ai.ttsInstruction", "用于控制合成时的语气、风格。"))
                 .setSaveConsumer(v -> h.ttsInstruction = v)
+                .build());
+        cat.addEntry(eb.startDropdownMenu(text("field.shabao_ai.ttsAuthType", "TTS 认证方式"),
+                        h.ttsAuthType, value -> value, v -> Text.literal(v))
+                .setSelections(java.util.List.of("api-key", "Bearer"))
+                .setDefaultValue("api-key")
+                .setTooltip(text("tooltip.shabao_ai.ttsAuthType",
+                        "语音端点认证头：api-key（Azure 风格，默认）或 Bearer（OpenAI 兼容）。"
+                                + "默认 MiMo 端点用 api-key；多数第三方兼容端点用 Bearer。"))
+                .setSaveConsumer(v -> h.ttsAuthType = v)
                 .build());
     }
 
@@ -292,14 +312,16 @@ public final class ShabaoConfigScreen {
                     required(h.asrModel, "ASR 模型"),
                     "",
                     required(h.asrLanguage, "ASR 语言"),
-                    "");
+                    "",
+                    blankToDefault(h.asrAuthType, "api-key"));
             config.tts = new ModConfig.Speech(
                     required(h.ttsBase, "TTS Base URL"),
                     keyOrExisting(h.ttsKey, original.tts.apiKey()),
                     required(h.ttsModel, "TTS 模型"),
                     required(h.ttsVoice, "TTS 音色"),
                     "",
-                    h.ttsInstruction);
+                    h.ttsInstruction,
+                    blankToDefault(h.ttsAuthType, "api-key"));
             config.companionName = ModConfig.normalizeCompanionName(h.companionName);
             config.builtInSkin = ModConfig.BUILT_IN_SKINS.contains(h.builtInSkin)
                     ? h.builtInSkin : ModConfig.DEFAULT_BUILT_IN_SKIN;
@@ -376,6 +398,11 @@ public final class ShabaoConfigScreen {
         return input == null || input.isBlank() ? existing : input;
     }
 
+    /** 空值回退默认值：旧配置缺 authType 时 Gson 填 null，此处兜底为默认认证方式。 */
+    private static String blankToDefault(String value, String fallback) {
+        return value == null || value.isBlank() ? fallback : value;
+    }
+
     /** 用于在 SaveConsumer 链式调用里暂存当前编辑值的简单 holder。 */
     private static final class Holder {
         String llmBase;
@@ -390,6 +417,8 @@ public final class ShabaoConfigScreen {
         String asrLanguage;
         String ttsVoice;
         String ttsInstruction;
+        String asrAuthType;
+        String ttsAuthType;
         String companionName;
         String builtInSkin;
         boolean customSkinEnabled;

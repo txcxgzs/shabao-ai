@@ -47,7 +47,7 @@ public final class SpeechClient {
         JsonObject options=new JsonObject();options.addProperty("language",blank(s.language())?"auto":s.language());body.add("asr_options",options);
         HttpRequest.Builder b=HttpRequest.newBuilder(endpoint(s)).timeout(Duration.ofSeconds(90))
                 .header("Content-Type","application/json").POST(HttpRequest.BodyPublishers.ofString(GSON.toJson(body)));
-        auth(b,s.apiKey());
+        auth(b,s.apiKey(),s.authType());
         return HTTP.sendAsync(b.build(),HttpResponse.BodyHandlers.ofString()).thenApply(r->{
             if(r.statusCode()/100!=2)throw new IllegalStateException("ASR HTTP "+r.statusCode());
             JsonObject j=JsonParser.parseString(r.body()).getAsJsonObject();
@@ -68,7 +68,7 @@ public final class SpeechClient {
         messages.add(message("assistant",text));body.add("messages",messages);
         JsonObject audio=new JsonObject();audio.addProperty("format","wav");audio.addProperty("voice",blank(s.voice())?"mimo_default":s.voice());body.add("audio",audio);
         HttpRequest.Builder b=HttpRequest.newBuilder(endpoint(s)).timeout(Duration.ofSeconds(90)).header("Content-Type","application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(GSON.toJson(body)));auth(b,s.apiKey());
+                .POST(HttpRequest.BodyPublishers.ofString(GSON.toJson(body)));auth(b,s.apiKey(),s.authType());
         return HTTP.sendAsync(b.build(),HttpResponse.BodyHandlers.ofString()).thenAccept(r->{
             if(r.statusCode()/100!=2)throw new IllegalStateException("TTS HTTP "+r.statusCode());
             JsonObject root=JsonParser.parseString(r.body()).getAsJsonObject();
@@ -83,6 +83,15 @@ public final class SpeechClient {
         catch(Exception e){throw new IllegalStateException("TTS 返回值不是可播放 WAV",e);}
     }
     private static URI endpoint(ModConfig.Speech s){String base=s.baseUrl();return URI.create((base.endsWith("/")?base.substring(0,base.length()-1):base)+"/chat/completions");}
-    private static void auth(HttpRequest.Builder b,String key){if(!blank(key))b.header("api-key",key);}
+    private static void auth(HttpRequest.Builder b,String key,String authType){
+        if(blank(key))return;
+        // 【风险A】支持两种语音端点认证头：Bearer（OpenAI 兼容）或 api-key（Azure 风格）。
+        // null/空/未知值兜底走 api-key，保持与旧配置及默认 MiMo 端点的兼容。
+        if("Bearer".equalsIgnoreCase(authType)){
+            b.header("Authorization","Bearer "+key);
+        }else{
+            b.header("api-key",key);
+        }
+    }
     private static boolean blank(String s){return s==null||s.isBlank();}
 }
