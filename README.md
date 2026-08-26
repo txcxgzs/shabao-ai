@@ -2,7 +2,7 @@
 
 > 你的 Minecraft 世界里，一个**会思考、会规划、会自己做决定**的 AI 队友。
 >
-> 面向 Minecraft **1.21.1** 的 Fabric Mod：世界里存在一个真实的 AI 玩家 NPC，接入任意 OpenAI 兼容的大模型（DeepSeek / 豆包 / GLM / Qwen……），自主完成**规划 → 侦查 → 建造 → 验收**的完整闭环，还能陪你聊天、语音互动、打怪、探索、记录一切。
+> 面向 Minecraft **1.21.1** 的 Fabric Mod：世界里存在一个真实的 AI 玩家 NPC，接入任意 OpenAI 兼容的大模型（DeepSeek / 豆包 / GLM / Qwen / [OrcaRouter](https://www.orcarouter.ai)……），自主完成**规划 → 侦查 → 建造 → 验收**的完整闭环，还能陪你聊天、语音互动、打怪、探索、记录一切。
 
 ## ✨ 核心亮点
 
@@ -89,7 +89,7 @@
 }
 ```
 
-> LLM 端点需兼容 `POST {baseUrl}/chat/completions`，支持工具调用可选。语音 ASR/TTS 默认使用 MiMo
+> LLM 端点需兼容 `POST {baseUrl}/chat/completions`，支持工具调用可选。像 [OrcaRouter](https://www.orcarouter.ai)（`https://api.orcarouter.ai/v1`）这类 OpenAI 兼容网关，一个 key 即可接入多模型并自动路由/容灾。语音 ASR/TTS 默认使用 MiMo
 > （`https://api.xiaomimimo.com/v1`，模型 `mimo-v2.5-asr` / `mimo-v2.5-tts`），也支持任意返回
 > `choices[0].message.content`（ASR）或 `choices[0].message.audio.data`（TTS，base64 WAV）的
 > OpenAI 兼容语音端点。建议在创造模式和可信世界启用自动建造。
